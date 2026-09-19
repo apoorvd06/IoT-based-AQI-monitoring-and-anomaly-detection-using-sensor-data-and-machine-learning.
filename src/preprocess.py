@@ -30,3 +30,14 @@ print(
     ["fault_type"]
     .value_counts()
 )
+# Select only normal data for Isolation Forest training
+normal_data = ground_truth[ground_truth["fault_type"] == "none"].copy()
+
+print("\nNormal Data for Training:")
+print(normal_data.head())
+
+print("\nNormal Data Shape:")
+print(normal_data.shape)
+
+print("\nMissing Values in Normal Data:")
+print(normal_data.isnull().sum())
