@@ -195,3 +195,32 @@ joblib.dump(
 )
 
 print("\nModel and scaler saved successfully!")
+
+features = [
+    "raw_pm2_5",
+    "temperature",
+    "humidity",
+    "pm25_change"
+]
+
+X_train = normal_train[features]
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+
+model = IsolationForest(
+    n_estimators=100,
+    contamination="auto",
+    random_state=42
+)
+
+model.fit(X_train_scaled)
+
+print("\nIsolation Forest trained successfully!")
+print("Training samples:", len(X_train))
+print("Features:", features)
+
+joblib.dump(model, "models/isolation_forest.pkl")
+joblib.dump(scaler, "models/scaler.pkl")
+
+print("\nModel and scaler saved successfully!")
