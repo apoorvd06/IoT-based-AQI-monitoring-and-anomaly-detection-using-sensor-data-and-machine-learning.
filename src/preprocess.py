@@ -36,6 +36,10 @@ print(
 # Select only normal data for Isolation Forest training
 normal_data = ground_truth[ground_truth["fault_type"] == "none"].copy()
 
+# Create a missing-value indicator for PM2.5
+ground_truth["pm25_missing"] = ground_truth["raw_pm2_5"].isnull().astype(int)
+normal_data["pm25_missing"] = normal_data["raw_pm2_5"].isnull().astype(int)
+
 print("\nNormal Data for Training:")
 print(normal_data.head())
 
@@ -45,7 +49,7 @@ print(normal_data.shape)
 print("\nMissing Values in Normal Data:")
 print(normal_data.isnull().sum())
 # Select features for Isolation Forest
-features = ["raw_pm2_5", "temperature", "humidity"]
+features = ["raw_pm2_5", "temperature", "humidity", "pm25_missing"]
 
 X_train = normal_data[features]
 
@@ -123,4 +127,51 @@ print("\nAnomaly Rate by Fault Type:")
 print(
     ground_truth.groupby("fault_type")["anomaly_score"]
     .apply(lambda x: (x < 0).mean() * 100)
+)
+
+# Sort data by device and timestamp
+ground_truth = ground_truth.sort_values(
+    ["device_id", "timestamp"]
+).copy()
+
+raw_data = raw_data.sort_values(
+    ["device_id", "timestamp"]
+).copy()
+
+# Calculate PM2.5 change from the previous reading
+ground_truth["pm25_change"] = (
+    ground_truth.groupby("device_id")["raw_pm2_5"].diff()
+)
+
+raw_data["pm25_change"] = (
+    raw_data.groupby("device_id")["raw_pm2_5"].diff()
+)
+
+print("\nPM2.5 Change Feature:")
+print(
+    ground_truth[
+        ["device_id", "timestamp", "raw_pm2_5", "pm25_change", "fault_type"]
+    ].head(15)
+)
+print("\nMissing PM2.5 Change Values:")
+print(ground_truth["pm25_change"].isnull().sum())
+
+# Identify missing PM2.5 readings
+missing_pm25 = ground_truth[ground_truth["raw_pm2_5"].isnull()].copy()
+
+print("\nMissing PM2.5 Records:")
+print(missing_pm25.shape)
+
+# Keep only records with valid PM2.5 readings for ML processing
+ml_data = ground_truth[ground_truth["raw_pm2_5"].notnull()].copy()
+
+print("\nData Available for ML:")
+print(ml_data.shape)
+
+ground_truth["pm25_change"] = (
+    ground_truth.groupby("device_id")["raw_pm2_5"].diff()
+)
+
+raw_data["pm25_change"] = (
+    raw_data.groupby("device_id")["raw_pm2_5"].diff()
 )
