@@ -1,0 +1,6 @@
+device_id,fault_type,usable_records,actual_fault_records,predicted_anomaly_records,actual_fault_percentage,predicted_anomaly_percentage
+D01,none,2015,0,495,0.0,24.56575682382134
+D02,drift,2015,1512,1171,75.03722084367246,58.11414392059553
+D03,spikes,2015,25,523,1.240694789081886,25.955334987593055
+D04,missing_data,1821,0,443,0.0,24.327292696320704
+D05,progressive_degradation,1862,1469,1238,78.8936627282492,66.48764769065521

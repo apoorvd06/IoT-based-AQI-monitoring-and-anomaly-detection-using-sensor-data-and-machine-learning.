@@ -39,40 +39,28 @@ evaluation_file = (
 # 2. LOAD PREDICTIONS
 # ============================================================
 
-predictions = pd.read_csv(prediction_file)
+predictions = pd.read_csv(
+    prediction_file
+)
 
 print("\nPrediction results loaded!")
 print("Prediction shape:", predictions.shape)
 
 
 # ============================================================
-# 3. LOAD GROUND TRUTH
+# 3. LOAD RECORD-LEVEL GROUND TRUTH
 # ============================================================
 
-ground_truth = pd.read_csv(ground_truth_file)
+ground_truth = pd.read_csv(
+    ground_truth_file
+)
 
 print("\nGround-truth dataset loaded!")
 print("Ground-truth shape:", ground_truth.shape)
 
 
 # ============================================================
-# 4. CHECK ACTUAL FAULT TYPES
-# ============================================================
-
-print("\n============================================")
-print("GROUND-TRUTH FAULT TYPES")
-print("============================================")
-
-print(
-    ground_truth[
-        ["device_id", "fault_type"]
-    ].drop_duplicates()
-    .sort_values("device_id")
-)
-
-
-# ============================================================
-# 5. MERGE PREDICTIONS WITH GROUND TRUTH
+# 4. MERGE PREDICTIONS WITH GROUND TRUTH
 # ============================================================
 
 evaluation = predictions.merge(
@@ -81,10 +69,15 @@ evaluation = predictions.merge(
             "timestamp",
             "device_id",
             "true_pm2_5",
-            "fault_type"
+            "fault_type",
+            "fault_label",
+            "fault_reason"
         ]
     ],
-    on=["timestamp", "device_id"],
+    on=[
+        "timestamp",
+        "device_id"
+    ],
     how="left"
 )
 
@@ -94,20 +87,37 @@ print("Shape:", evaluation.shape)
 
 
 # ============================================================
-# 6. CREATE ACTUAL FAULT LABEL
+# 5. CHECK FOR MERGE PROBLEMS
 # ============================================================
 
-# D01 = healthy
-# All other fault types = faulty sensor
+missing_labels = evaluation["fault_label"].isna().sum()
+
+print(
+    "\nMissing ground-truth labels after merge:",
+    missing_labels
+)
+
+
+# ============================================================
+# 6. ACTUAL FAULT LABEL
+# ============================================================
+
+# 0 = normal
+# 1 = actual sensor fault
 
 evaluation["actual_fault"] = (
-    evaluation["fault_type"] != "none"
-).astype(int)
+    evaluation["fault_label"]
+    .astype(int)
+)
 
 
-# Model prediction:
-# -1 = anomaly
-#  1 = normal
+# ============================================================
+# 7. MODEL PREDICTION
+# ============================================================
+
+# Isolation Forest:
+#  1  = normal
+# -1  = anomaly
 
 evaluation["predicted_fault"] = (
     evaluation["prediction"] == -1
@@ -115,7 +125,7 @@ evaluation["predicted_fault"] = (
 
 
 # ============================================================
-# 7. CHECK LABEL COUNTS
+# 8. BASIC DISTRIBUTION
 # ============================================================
 
 print("\n============================================")
@@ -123,7 +133,9 @@ print("ACTUAL FAULT DISTRIBUTION")
 print("============================================")
 
 print(
-    evaluation["fault_type"].value_counts()
+    evaluation["actual_fault"]
+    .value_counts()
+    .sort_index()
 )
 
 
@@ -132,18 +144,21 @@ print("PREDICTED DISTRIBUTION")
 print("============================================")
 
 print(
-    evaluation["predicted_status"].value_counts()
+    evaluation["predicted_fault"]
+    .value_counts()
+    .sort_index()
 )
 
 
 # ============================================================
-# 8. CONFUSION MATRIX
+# 9. CONFUSION MATRIX
 # ============================================================
 
 cm = confusion_matrix(
     evaluation["actual_fault"],
     evaluation["predicted_fault"]
 )
+
 
 print("\n============================================")
 print("CONFUSION MATRIX")
@@ -153,10 +168,11 @@ print(cm)
 
 
 # ============================================================
-# 9. EXTRACT TP / TN / FP / FN
+# 10. TRUE / FALSE POSITIVES AND NEGATIVES
 # ============================================================
 
 tn, fp, fn, tp = cm.ravel()
+
 
 print("\nTrue Negatives :", tn)
 print("False Positives:", fp)
@@ -165,7 +181,7 @@ print("True Positives  :", tp)
 
 
 # ============================================================
-# 10. PRECISION / RECALL / F1
+# 11. PRECISION
 # ============================================================
 
 precision = precision_score(
@@ -174,11 +190,21 @@ precision = precision_score(
     zero_division=0
 )
 
+
+# ============================================================
+# 12. RECALL
+# ============================================================
+
 recall = recall_score(
     evaluation["actual_fault"],
     evaluation["predicted_fault"],
     zero_division=0
 )
+
+
+# ============================================================
+# 13. F1 SCORE
+# ============================================================
 
 f1 = f1_score(
     evaluation["actual_fault"],
@@ -191,13 +217,21 @@ print("\n============================================")
 print("MODEL PERFORMANCE")
 print("============================================")
 
-print(f"Precision: {precision:.4f}")
-print(f"Recall:    {recall:.4f}")
-print(f"F1-score:  {f1:.4f}")
+print(
+    f"Precision: {precision:.4f}"
+)
+
+print(
+    f"Recall:    {recall:.4f}"
+)
+
+print(
+    f"F1-score:  {f1:.4f}"
+)
 
 
 # ============================================================
-# 11. FULL CLASSIFICATION REPORT
+# 14. CLASSIFICATION REPORT
 # ============================================================
 
 print("\n============================================")
@@ -218,76 +252,161 @@ print(
 
 
 # ============================================================
-# 12. PERFORMANCE BY FAULT TYPE
+# 15. PERFORMANCE BY FAULT REASON
 # ============================================================
 
 print("\n============================================")
-print("PERFORMANCE BY FAULT TYPE")
+print("PERFORMANCE BY FAULT REASON")
 print("============================================")
 
-fault_types = [
-    "none",
-    "drift",
-    "spikes",
-    "progressive_degradation"
-]
 
-for fault in fault_types:
+fault_reasons = (
+    evaluation["fault_reason"]
+    .dropna()
+    .unique()
+)
+
+
+for reason in sorted(fault_reasons):
 
     subset = evaluation[
-        evaluation["fault_type"] == fault
+        evaluation["fault_reason"] == reason
     ]
 
-    if len(subset) == 0:
-        continue
+    actual_faults = subset["actual_fault"].sum()
+
+    predicted_anomalies = (
+        subset["predicted_fault"].sum()
+    )
 
     anomaly_rate = (
-        subset["predicted_fault"].mean() * 100
+        predicted_anomalies
+        / len(subset)
+        * 100
     )
 
     print(
-        f"{fault:25s} "
+        f"{reason:40s} "
         f"records={len(subset):4d} "
-        f"predicted_anomaly={anomaly_rate:6.2f}%"
+        f"actual_faults={actual_faults:4d} "
+        f"predicted_anomalies={predicted_anomalies:4d} "
+        f"anomaly_rate={anomaly_rate:6.2f}%"
     )
 
 
 # ============================================================
-# 13. DEVICE-WISE PERFORMANCE
+# 16. DEVICE-WISE ACTUAL VS PREDICTED
 # ============================================================
 
 print("\n============================================")
-print("DEVICE-WISE PERFORMANCE")
+print("DEVICE-WISE ACTUAL VS PREDICTED")
 print("============================================")
+
 
 device_results = []
 
-for device_id, group in evaluation.groupby("device_id"):
 
-    actual_fault_rate = (
-        group["actual_fault"].mean() * 100
+for device_id, group in evaluation.groupby(
+    "device_id"
+):
+
+    actual_faults = (
+        group["actual_fault"].sum()
     )
 
-    predicted_fault_rate = (
-        group["predicted_fault"].mean() * 100
+    predicted_anomalies = (
+        group["predicted_fault"].sum()
     )
 
     device_results.append({
+
         "device_id": device_id,
-        "fault_type": group["fault_type"].iloc[0],
-        "records": len(group),
-        "actual_fault_percentage": actual_fault_rate,
-        "predicted_anomaly_percentage": predicted_fault_rate
+
+        "fault_type": group[
+            "fault_type"
+        ].iloc[0],
+
+        "usable_records": len(group),
+
+        "actual_fault_records": int(
+            actual_faults
+        ),
+
+        "predicted_anomaly_records": int(
+            predicted_anomalies
+        ),
+
+        "actual_fault_percentage": (
+            actual_faults
+            / len(group)
+            * 100
+        ),
+
+        "predicted_anomaly_percentage": (
+            predicted_anomalies
+            / len(group)
+            * 100
+        )
+
     })
 
 
-device_results = pd.DataFrame(device_results)
+device_results = pd.DataFrame(
+    device_results
+)
+
 
 print(device_results)
 
 
 # ============================================================
-# 14. SAVE EVALUATION DATA
+# 17. DETECTION RATE FOR ACTUAL FAULTS
+# ============================================================
+
+print("\n============================================")
+print("FAULT DETECTION RATE")
+print("============================================")
+
+
+actual_fault_records = (
+    evaluation[
+        evaluation["actual_fault"] == 1
+    ]
+)
+
+
+detected_fault_records = (
+    actual_fault_records[
+        actual_fault_records["predicted_fault"] == 1
+    ]
+)
+
+
+fault_detection_rate = (
+    len(detected_fault_records)
+    / len(actual_fault_records)
+    * 100
+)
+
+
+print(
+    f"Actual faulty records: "
+    f"{len(actual_fault_records)}"
+)
+
+print(
+    f"Detected faulty records: "
+    f"{len(detected_fault_records)}"
+)
+
+print(
+    f"Fault detection rate: "
+    f"{fault_detection_rate:.2f}%"
+)
+
+
+# ============================================================
+# 18. SAVE EVALUATION RESULTS
 # ============================================================
 
 evaluation.to_csv(
@@ -295,14 +414,48 @@ evaluation.to_csv(
     index=False
 )
 
-print("\nEvaluation data saved successfully!")
-print("File:", evaluation_file)
+
+print(
+    "\nEvaluation data saved successfully!"
+)
+
+print(
+    "File:",
+    evaluation_file
+)
 
 
 # ============================================================
-# 15. FINAL MESSAGE
+# 19. SAVE DEVICE RESULTS
+# ============================================================
+
+device_file = (
+    BASE_DIR
+    / "reports"
+    / "device_evaluation.csv"
+)
+
+
+device_results.to_csv(
+    device_file,
+    index=False
+)
+
+
+print(
+    "\nDevice evaluation saved successfully!"
+)
+
+print(
+    "File:",
+    device_file
+)
+
+
+# ============================================================
+# 20. FINAL MESSAGE
 # ============================================================
 
 print("\n============================================")
-print("MODEL EVALUATION COMPLETED")
+print("CORRECTED MODEL EVALUATION COMPLETED")
 print("============================================")
