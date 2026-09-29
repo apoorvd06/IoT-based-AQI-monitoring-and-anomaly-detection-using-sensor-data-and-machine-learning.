@@ -81,3 +81,5 @@ The main objectives of the project are:
         │  Fault Analysis         │
         │  Anomaly Scores         │
         └─────────────────────────┘
+
+        server deployed on 29-09-2026
