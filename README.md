@@ -1,5 +1,11 @@
 # IoT-Based AQI Monitoring and Anomaly Detection Using Sensor Data and Machine Learning
 
+# IoT-Based AQI Monitoring and Anomaly Detection Using Sensor Data and Machine Learning
+
+## 🚀 Live Demo
+
+👉 **[Open the Live Dashboard](https://sensorhealthmonitoringsystem.streamlit.app/)**
+
 ## 📌 Project Overview
 
 Air quality monitoring systems depend on sensors to continuously measure parameters such as PM2.5, temperature, and humidity. However, sensors can develop faults such as missing readings, sudden spikes, gradual drift, or progressive degradation.
